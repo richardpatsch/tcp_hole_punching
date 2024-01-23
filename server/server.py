@@ -25,13 +25,12 @@ def send_message_to_all(sockets, text):
 
 
 def server():
-    sock = socket.socket()
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.bind((SERVER_IP, SERVER_PORT))
     sock.listen(1)
 
-    print('Listening on {}:{}'.format(SERVER_IP, SERVER_PORT))
+    print('Server listening on {}:{}'.format(SERVER_IP, SERVER_PORT))
+
     client_addresses = []
     client_connections = []
     connections = []

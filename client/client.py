@@ -1,6 +1,7 @@
 import socket
 import threading
 import time
+import sys
 
 from utility import *
 
@@ -25,10 +26,12 @@ def get_my_local_ip():
 def server_communication(sock, ip, port):
     while True:
         try:
-            sock.connect((ip, port))
+            print("try connecting to {}:{}".format(ip, port))
+            sock.connect((ip,port))
         except ConnectionRefusedError:
             print(f"Can't connect to the IP [{sock}:{port}]")
         except OSError:
+            print("OSError")
             pass
 
 
@@ -60,10 +63,10 @@ def client_communication(sock, ip, port):
         pass
 
 
-def listen_for_connections(sock):
+def handle_peer_connection(peer_socket):
     while True:
         try:
-            new_connection, client_address = sock.accept()
+            new_connection, client_address = peer_socket.accept()
             print(f"Connected by {client_address}")
             msg = bytes("Hello! This message came from the other client!", encoding='utf-8')
             new_connection.sendall(msg)
@@ -73,35 +76,37 @@ def listen_for_connections(sock):
 
 
 def client():
-    # socket for server communication
-    sock = socket.socket()
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-    sock.settimeout(TIMEOUT)
+    other_client_ip = None
+    other_client_port = None
 
+    listening_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listening_socket.bind(('', 0)) # bind to an available port
+    listening_socket.listen(1)
+    listening_port = listening_socket.getsockname()[1]
+    print(f"Listening on port {listening_port}")
+
+    # socket for server communication
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.settimeout(TIMEOUT)
 
     # socket for client communication
-    client_sock = socket.socket()
-    client_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    client_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-    client_sock.settimeout(TIMEOUT)
-    client_sock.bind((get_my_local_ip(), SERVER_PORT))
-    client_sock.listen(1)
+    peer_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    peer_socket.settimeout(TIMEOUT)
 
-    threading.Thread(target=server_communication, args=(sock, SERVER_IP, SERVER_PORT,)).start()
-    threading.Thread(target=listen_for_connections, args=(client_sock,)).start()
+    # connect to server
+    threading.Thread(target=server_communication, args=(server_socket, SERVER_IP, SERVER_PORT,)).start()
 
-    print("test")
+    # wait for other client info
     while True:
         try:
-            packet = sock.recv(BUFFER_SIZE)
+            packet = server_socket.recv(BUFFER_SIZE)
             if packet:
                 text_string = packet.decode('utf-8')
                 divided_packets = text_string.split('END')
                 for p in divided_packets:
                     if p != "":
                         print(f'sever says: {p}')
-                        sock.sendall(get_my_local_ip().encode('utf-8'))
+                        server_socket.sendall(get_my_local_ip().encode('utf-8'))
 
                         if p.startswith('CONNECT'):
                             without_command = p[len('CONNECT '):]
@@ -109,11 +114,17 @@ def client():
 
                             # build connection
                             print(f"Received cmd to connect to {client_ip}:{client_port}")
+                            break
                             threading.Thread(target=client_communication,
                                              args=(client_sock, client_ip, int(client_port),)).start()
 
         except OSError:
+            print("OSError1")
             pass
+
+
+    print(f"CONNECT TO {other_client_ip}:{other_client_port} now")
+    #threading.Thread(target=handle_peer_connection, args=(peer_socket,)).start()
 
 
 if __name__ == '__main__':
